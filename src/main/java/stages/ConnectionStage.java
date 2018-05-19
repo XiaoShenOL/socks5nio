@@ -82,8 +82,7 @@ public class ConnectionStage implements IStage {
                 distChannel.configureBlocking(false);
                 distChannel.connect(new InetSocketAddress(getAddress(addressBuffer.array()), getPort(portBuffer.array())));
             }
-            distChannel.finishConnect();
-            if (!distChannel.isConnected()){
+            if (!distChannel.finishConnect()){
                 distChannel.register(selector, SelectionKey.OP_CONNECT);
                 map.put(distChannel, this);
                 return this;
