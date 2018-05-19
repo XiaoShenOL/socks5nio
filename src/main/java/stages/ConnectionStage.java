@@ -50,6 +50,12 @@ public class ConnectionStage implements IStage {
     @Override
     public IStage proceed(Selector selector, Map<SocketChannel, IStage> map) {
         try {
+            if (!sourceChannel.isOpen()) {
+                if (distChannel.isOpen()) {
+                    distChannel.close();
+                }
+                return null;
+            }
             sourceChannel.read(constBuffer);
             if (constBuffer.position() != constBuffer.limit())
                 return this;
