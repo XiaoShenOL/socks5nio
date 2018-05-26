@@ -12,54 +12,45 @@ public class CommunicationStage implements IStage{
     private SocketChannel client, server;
     private ByteBuffer clientBuffer, serverBuffer;
 
-    public CommunicationStage(SocketChannel client, SocketChannel server, ByteBuffer clientBuffer, ByteBuffer serverBuffer) throws IOException {
-        this.client = client;
-        this.server = server;
+    public CommunicationStage(SocketChannel clientChannel, SocketChannel serverChannel, ByteBuffer clientBuffer, ByteBuffer serverBuffer) throws IOException {
+        this.client = clientChannel;
+        this.server = serverChannel;
         this.clientBuffer = clientBuffer;
         this.serverBuffer = serverBuffer;
     }
 
     @Override
-    public IStage proceed(int operation, Selector selector, Map<SocketChannel, IStage> map) {
+    public void proceed(int operation, Selector selector, Map<SocketChannel, IStage> map) {
         try {
             if (!client.isOpen()) {
                 if (server.isOpen()) server.close();
-                return null;
+                return;
             }
             if (!server.isOpen()) {
                 if (client.isOpen()) client.close();
-                return null;
+                return;
             }
             if (operation == SelectionKey.OP_READ) {
-                if (clientBuffer.hasRemaining()) {
-                    System.out.println("Has remaining for " + client.getRemoteAddress());
-                    return this;
-                }
+                if (clientBuffer.hasRemaining()) return;
                 clientBuffer.clear();
-                System.out.print("Reading from " + client.getRemoteAddress() + " ");
                 int bytes = client.read(clientBuffer);
-                System.out.println(bytes);
                 clientBuffer.flip();
                 if ( bytes > 0) {
                     server.register(selector, SelectionKey.OP_WRITE);
                 } else {
-                    client.close();
-                    server.close();
-                    return null;
+                    if (client.isOpen()) client.close();
+                    if (selector.isOpen()) server.close();
+                    return;
                 }
             } else if(operation == SelectionKey.OP_WRITE) {
-                System.out.print("Writing to " + client.getRemoteAddress() + " ");
-                int bytes = 0;
                 while(serverBuffer.hasRemaining()) {
-                    bytes += client.write(serverBuffer);
+                    client.write(serverBuffer);
                 }
-                System.out.println(bytes);
                 client.register(selector, SelectionKey.OP_READ);
             }
-            return this;
+
         } catch (IOException iOE) {
             iOE.printStackTrace();
-            return null;
         }
     }
 }

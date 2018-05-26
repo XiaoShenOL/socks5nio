@@ -13,34 +13,36 @@ public class ConnectionWriteStage implements IStage {
     private ByteBuffer clientBuffer, serverBuffer;
     private boolean accepted;
 
-    public ConnectionWriteStage(SocketChannel client, SocketChannel sever, ByteBuffer clientBuffer, ByteBuffer serverBuffer, boolean flag) {
-        this.client = client;
-        this.server = sever;
+    public ConnectionWriteStage(SocketChannel clientChannel, SocketChannel serverChannel, ByteBuffer clientBuffer, ByteBuffer serverBuffer, boolean flag) {
+        this.client = clientChannel;
+        this.server = serverChannel;
         this.clientBuffer = clientBuffer;
         this.serverBuffer = serverBuffer;
         this.accepted = flag;
     }
 
     @Override
-    public IStage proceed(int OP, Selector selector, Map<SocketChannel, IStage> map) {
+    public void proceed(int ignore, Selector selector, Map<SocketChannel, IStage> stages) {
         try {
-//            System.out.println("CON WRITE STAGE");
+            if (!client.isOpen()) {
+                if (server.isOpen()) selector.close();
+                return;
+            }
             while(clientBuffer.hasRemaining()) {
                 client.write(clientBuffer);
             }
             if (accepted) {
-                IStage clientStage = new CommunicationStage(client, server, clientBuffer, serverBuffer);
-                IStage serverStage = new CommunicationStage(server, client, serverBuffer, clientBuffer);
                 serverBuffer.flip();
-                map.put(client, clientStage);
-                map.put(server, serverStage);
+                stages.put(client, new CommunicationStage(client, server, clientBuffer, serverBuffer));
+                stages.put(server, new CommunicationStage(server, client, serverBuffer, clientBuffer));
                 client.register(selector, SelectionKey.OP_READ);
                 server.register(selector, SelectionKey.OP_READ);
-                return clientStage;
+                System.out.println("Connected " + server.getRemoteAddress());
+            } else {
+                System.out.println("Connection rejected " + server.getRemoteAddress());
             }
         }catch (IOException iOE) {
             iOE.printStackTrace();
         }
-        return null;
     }
 }

@@ -10,37 +10,33 @@ import java.util.Map;
 public class AuthMethodWriteStage implements IStage {
 
     private boolean accepted;
-    final private SocketChannel channel;
-    final private ByteBuffer buffer;
+    private SocketChannel client;
+    private ByteBuffer buffer;
 
-    public AuthMethodWriteStage(SocketChannel sourceChannel, ByteBuffer byteBuffer, boolean flag) {
-        this.channel = sourceChannel;
-        this.buffer = byteBuffer;
+    public AuthMethodWriteStage(SocketChannel clientChannel, ByteBuffer clientBuffer, boolean flag) {
+        this.client = clientChannel;
+        this.buffer = clientBuffer;
         this.accepted = flag;
     }
 
     @Override
-    public IStage proceed(int OP, Selector selector, Map<SocketChannel, IStage> map) {
+    public void proceed(int ignore, Selector selector, Map<SocketChannel, IStage> stages) {
         try {
-//            System.out.println("AUTH WRITE STAGE");
-
-            if (!channel.isOpen()) {
-                buffer.clear();
-                return null;
-            }
+            if (!client.isOpen()) return;
             while (buffer.hasRemaining()) {
-                channel.write(buffer);
+                client.write(buffer);
             }
             buffer.clear();
             if (accepted) {
-                channel.register(selector, SelectionKey.OP_READ);
-                IStage stage = new ConnectionReadStage(channel, buffer);
-                map.put(channel, stage);
-                return stage;
+                client.register(selector, SelectionKey.OP_READ);
+                stages.put(client, new ConnectionReadStage(client, buffer));
+                System.out.println("Auth completed for " + client.getRemoteAddress());
+            } else {
+                if (client.isOpen()) client.close();
+                System.out.println("Auth rejected for " + client.getRemoteAddress());
             }
         } catch (IOException iOE) {
             iOE.printStackTrace();
         }
-        return null;
     }
 }

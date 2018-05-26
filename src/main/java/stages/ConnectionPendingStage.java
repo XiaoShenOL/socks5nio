@@ -8,53 +8,51 @@ import java.nio.channels.SocketChannel;
 import java.util.Arrays;
 import java.util.Map;
 
-import static stages.ConnectionReadStage.RESPONDING_TEMPLATE;
 import static stages.Utils.*;
 
 public class ConnectionPendingStage implements IStage {
 
     private SocketChannel client, server;
-    ByteBuffer clientBuffer;
-    public ConnectionPendingStage(SocketChannel client, SocketChannel server, ByteBuffer clientBuffer) {
-        this.client = client;
-        this.server = server;
+    private ByteBuffer clientBuffer;
+
+    public ConnectionPendingStage(SocketChannel clientChannel, SocketChannel serverChannel, ByteBuffer clientBuffer) {
+        this.client = clientChannel;
+        this.server = serverChannel;
         this.clientBuffer = clientBuffer;
     }
 
     @Override
-    public IStage proceed(int operation, Selector selector, Map<SocketChannel, IStage> map) {
+    public void proceed(int operation, Selector selector, Map<SocketChannel, IStage> stages) {
         try {
-//            System.out.println("CON PENDING STAGE");
             if (!client.isOpen()) {
                 if (server.isOpen()) server.close();
-                return null;
+                return;
             }
             if (server.finishConnect()) {
                 IStage stage = new ConnectionWriteStage(client, server, clientBuffer, ByteBuffer.allocate(BUFFER_SIZE), true);
-                map.put(client, stage);
-                map.put(server, stage);
+                stages.put(client, stage);
+                stages.put(server, stage);
                 server.register(selector, SelectionKey.OP_READ);
                 client.register(selector, SelectionKey.OP_WRITE);
-                return stage;
             } else {
+                clientBuffer.clear();
                 reject(ERROR_SOCKS_SERVER);
-                IStage stage = new ConnectionWriteStage(client, server, clientBuffer, ByteBuffer.allocate(BUFFER_SIZE), false);
                 client.register(selector, SelectionKey.OP_WRITE);
-                map.put(client, stage);
+                stages.put(client, new ConnectionWriteStage(client, server, clientBuffer, ByteBuffer.allocate(BUFFER_SIZE), false));
                 if(server.isOpen()) server.close();
-                return null;
             }
         } catch (IOException iOE) {
             iOE.printStackTrace();
-            return null;
         }
     }
 
-
     private void reject(byte error) {
-        byte[] response = Arrays.copyOf(RESPONDING_TEMPLATE, RESPONDING_TEMPLATE.length);
-        response[1] = error;
-        clientBuffer.clear();
-        clientBuffer.put(response);
+        clientBuffer.put(SOCKS_VERSION)
+                .put(ERROR_SOCKS_SERVER)
+                .put(RESERVED_BYTE)
+                .put(ADDRESS_TYPE)
+                .put(new byte[4])
+                .putShort((short) 0);
+        clientBuffer.flip();
     }
 }

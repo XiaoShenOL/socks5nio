@@ -21,7 +21,6 @@ public class Server {
 
     public static void main(String[] args) {
         Map<SocketChannel, IStage> stages = new HashMap<>();
-//        Map<SocketChannel, ByteBuffer> buffers = new HashMap<>();
 
         try (ServerSocketChannel serverChannel = ServerSocketChannel.open();
              Selector selector = Selector.open()){
@@ -30,9 +29,7 @@ public class Server {
             serverChannel.bind(new InetSocketAddress(Integer.parseInt(properties.getProperty(serverPortConfigName))));
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
             while (true) {
-//                System.out.print("Selecting - ");
                 selector.select();
-//                System.out.println("selected " + selector.select());
                 Set<SelectionKey> keys = selector.selectedKeys();
                 if (keys.isEmpty()) {
                     continue;
@@ -46,35 +43,22 @@ public class Server {
                     }
 
                     if (key.isWritable()) {
-                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_WRITE, selector, stages);
-//                        if (stage == null) {
-//                            closeChannel((SocketChannel) key.channel());
-//                            return true;
-//                        }
+                        stages.get(key.channel()).proceed(SelectionKey.OP_WRITE, selector, stages);
                         return true;
                     }
 
                     if (key.isConnectable()) {
-                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_CONNECT, selector, stages);
-//                        if (stage == null) {
-//                            closeChannel((SocketChannel) key.channel());
-//                            return true;
-//                        }
+                        stages.get(key.channel()).proceed(SelectionKey.OP_CONNECT, selector, stages);
                         return true;
                     }
 
                     if (key.isReadable()) {
-                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_READ, selector, stages);
-//                        if (stage == null) {
-//                            closeChannel((SocketChannel) key.channel());
-//                            return true;
-//                        }
+                        stages.get(key.channel()).proceed(SelectionKey.OP_READ, selector, stages);
                         return true;
                     }
                     return true;
                 });
                 stages.keySet().removeIf(channel -> !channel.isOpen());
-//                buffers.keySet().removeIf(channel -> !channel.isOpen());
             }
 
         } catch (IOException e) {
