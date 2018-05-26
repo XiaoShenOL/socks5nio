@@ -1,8 +1,9 @@
-import stages.AuthMethodStage;
+import stages.AuthMethodReadStage;
 import stages.IStage;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -12,12 +13,16 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static stages.Utils.*;
+
 public class Server {
     private static Properties properties = new Properties();
     private static String serverPortConfigName = "server.port";
 
     public static void main(String[] args) {
-        Map<SocketChannel, IStage> map = new HashMap<>();
+        Map<SocketChannel, IStage> stages = new HashMap<>();
+//        Map<SocketChannel, ByteBuffer> buffers = new HashMap<>();
+
         try (ServerSocketChannel serverChannel = ServerSocketChannel.open();
              Selector selector = Selector.open()){
             properties.load(ClassLoader.getSystemResourceAsStream("configuration.properties"));
@@ -25,7 +30,9 @@ public class Server {
             serverChannel.bind(new InetSocketAddress(Integer.parseInt(properties.getProperty(serverPortConfigName))));
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
             while (true) {
+//                System.out.print("Selecting - ");
                 selector.select();
+//                System.out.println("selected " + selector.select());
                 Set<SelectionKey> keys = selector.selectedKeys();
                 if (keys.isEmpty()) {
                     continue;
@@ -35,19 +42,39 @@ public class Server {
                         return true;
                     }
                     if (key.isAcceptable()) {
-                        return accept(map, key);
+                        return accept(stages, key);
                     }
-                    if (key.isReadable() || key.isConnectable()) {
-                        IStage stage = map.get(key.channel()).proceed(selector, map);
-                        if (stage == null) {
-                            closeChannel((SocketChannel) key.channel());
-                            return true;
-                        }
+
+                    if (key.isWritable()) {
+                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_WRITE, selector, stages);
+//                        if (stage == null) {
+//                            closeChannel((SocketChannel) key.channel());
+//                            return true;
+//                        }
+                        return true;
+                    }
+
+                    if (key.isConnectable()) {
+                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_CONNECT, selector, stages);
+//                        if (stage == null) {
+//                            closeChannel((SocketChannel) key.channel());
+//                            return true;
+//                        }
+                        return true;
+                    }
+
+                    if (key.isReadable()) {
+                        IStage stage = stages.get(key.channel()).proceed(SelectionKey.OP_READ, selector, stages);
+//                        if (stage == null) {
+//                            closeChannel((SocketChannel) key.channel());
+//                            return true;
+//                        }
                         return true;
                     }
                     return true;
                 });
-                map.keySet().removeIf(channel -> !channel.isOpen());
+                stages.keySet().removeIf(channel -> !channel.isOpen());
+//                buffers.keySet().removeIf(channel -> !channel.isOpen());
             }
 
         } catch (IOException e) {
@@ -55,7 +82,7 @@ public class Server {
         }
     }
 
-    private static boolean accept(Map<SocketChannel, IStage> map, SelectionKey key) {
+    private static boolean accept(Map<SocketChannel, IStage> channelsMap, SelectionKey key) {
         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
         SocketChannel channel = null;
         try {
@@ -64,10 +91,10 @@ public class Server {
             System.out.print(channel.getRemoteAddress());
             channel.configureBlocking(false);
             channel.register(key.selector(), SelectionKey.OP_READ);
-            map.put(channel, new AuthMethodStage(channel));
-            System.out.println(" is accepted");
+            channelsMap.put(channel, new AuthMethodReadStage(channel, ByteBuffer.allocate(BUFFER_SIZE)));
+            System.out.println(": accepted");
         } catch (IOException e) {
-            System.out.println(" is not accepted");
+            System.out.println(": not accepted");
             LogUtils.logException("Failed to process channel " + channel, e);
             if (channel != null) {
                 closeChannel(channel);

@@ -2,49 +2,64 @@ package stages;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
 
 public class CommunicationStage implements IStage{
 
-    private SocketChannel sourceChannel, distChannel;
-    private ByteBuffer sourceBuffer = ByteBuffer.allocate(500), distBuffer = ByteBuffer.allocate(500);
+    private SocketChannel client, server;
+    private ByteBuffer clientBuffer, serverBuffer;
 
-    public CommunicationStage(SocketChannel source, SocketChannel dist) throws IOException {
-        this.sourceChannel = source;
-        this.distChannel = dist;
+    public CommunicationStage(SocketChannel client, SocketChannel server, ByteBuffer clientBuffer, ByteBuffer serverBuffer) throws IOException {
+        this.client = client;
+        this.server = server;
+        this.clientBuffer = clientBuffer;
+        this.serverBuffer = serverBuffer;
     }
 
     @Override
-    public IStage proceed(Selector selector, Map<SocketChannel, IStage> map) {
+    public IStage proceed(int operation, Selector selector, Map<SocketChannel, IStage> map) {
         try {
-            int sourceBytes = 0, distBytes = 0;
-            sourceBytes = sourceChannel.read(sourceBuffer);
-            distBytes = distChannel.read(distBuffer);
-            if (sourceBytes == -1) {
-                if (distBytes != -1) distChannel.close();
+            if (!client.isOpen()) {
+                if (server.isOpen()) server.close();
                 return null;
             }
-            if (distBytes == -1) {
-                sourceChannel.close();
+            if (!server.isOpen()) {
+                if (client.isOpen()) client.close();
                 return null;
             }
-            write(sourceBytes, sourceBuffer, distChannel);
-            write(distBytes, distBuffer, sourceChannel);
+            if (operation == SelectionKey.OP_READ) {
+                if (clientBuffer.hasRemaining()) {
+                    System.out.println("Has remaining for " + client.getRemoteAddress());
+                    return this;
+                }
+                clientBuffer.clear();
+                System.out.print("Reading from " + client.getRemoteAddress() + " ");
+                int bytes = client.read(clientBuffer);
+                System.out.println(bytes);
+                clientBuffer.flip();
+                if ( bytes > 0) {
+                    server.register(selector, SelectionKey.OP_WRITE);
+                } else {
+                    client.close();
+                    server.close();
+                    return null;
+                }
+            } else if(operation == SelectionKey.OP_WRITE) {
+                System.out.print("Writing to " + client.getRemoteAddress() + " ");
+                int bytes = 0;
+                while(serverBuffer.hasRemaining()) {
+                    bytes += client.write(serverBuffer);
+                }
+                System.out.println(bytes);
+                client.register(selector, SelectionKey.OP_READ);
+            }
             return this;
         } catch (IOException iOE) {
             iOE.printStackTrace();
             return null;
-        }
-    }
-    private void write(int bytes, ByteBuffer src, SocketChannel dist) throws IOException {
-        if (bytes > 0) {
-            src.flip();
-            while (src.hasRemaining()) {
-                dist.write(src);
-            }
-            src.compact();
         }
     }
 }
