@@ -39,7 +39,7 @@ public class ConnectionWriteStage implements IStage {
                 server.register(selector, SelectionKey.OP_READ);
                 System.out.println("Connected " + server.getRemoteAddress());
             } else {
-                System.out.println("Connection rejected " + server.getRemoteAddress());
+                System.out.println("Connection rejected " + server.toString());
             }
         }catch (IOException iOE) {
             iOE.printStackTrace();

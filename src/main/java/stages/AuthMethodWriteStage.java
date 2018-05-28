@@ -33,7 +33,7 @@ public class AuthMethodWriteStage implements IStage {
                 System.out.println("Auth completed for " + client.getRemoteAddress());
             } else {
                 if (client.isOpen()) client.close();
-                System.out.println("Auth rejected for " + client.getRemoteAddress());
+                System.out.println("Auth rejected for " + client.toString());
             }
         } catch (IOException iOE) {
             iOE.printStackTrace();
